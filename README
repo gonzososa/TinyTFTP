@@ -1,0 +1,5 @@
+TinyTFTP is a TFP implementation in Go based in RFC 1350 
+
+https://www.ietf.org/rfc/rfc1350.txt
+
+Version 0.1 - 17/12/2014
