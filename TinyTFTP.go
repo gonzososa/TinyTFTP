@@ -8,6 +8,11 @@ import "bytes"
 const BLOCK_SIZE = 512
 
 const (
+  OCTET = "octet"
+  NETASCII = "netascii"
+)
+
+const (
   RRQ uint16 = 1  + iota
   WRQ
   DATA
@@ -45,10 +50,10 @@ func HandleRRQ (buffer []byte, conn *net.UDPConn, tid *net.UDPAddr) {
   if _, err := os.Stat (filename); err == nil {
     var fileBuffer []byte
 
-    if mode == "octet" {
+    if mode == OCTET {
       fileBuffer = make ([]byte, BLOCK_SIZE)
-    } else if mode == "netascii" {
-      panic ("Modo no soportado!!")
+    } else if mode == NETASCII {
+      panic ("Modo aún no soportado!!")
     } else {
       panic ("Modo desconocido!!")
     }
@@ -92,10 +97,10 @@ func HandleRRQ (buffer []byte, conn *net.UDPConn, tid *net.UDPAddr) {
 
       //data
       switch mode {
-        case "octet":
+        case OCTET:
         data = append (data, fileBuffer[:n]...)
         break
-        case "netascii":
+        case NETASCII:
         panic ("not supported...")
         break
       }
