@@ -7,6 +7,25 @@ import "bytes"
 
 const BLOCK_SIZE = 512
 
+const (
+  RRQ uint16 = 1  + iota
+  WRQ
+  DATA
+  ACK
+  ERROR
+)
+
+var ERRORS = [...] string {
+  "Not defined, see error message (if any).",
+  "File not found.",
+  "Access violation.",
+  "Disk full or allocation exceeded.",
+  "Illegal TFTP operation.",
+  "Unknown transfer ID.",
+  "File already exists.",
+  "No such user.",
+}
+
 func Bytes2UInt16 (value []byte) uint16 {
   var a uint16 = uint16 (value [0] & 0xff) << 8
   var b uint16 = uint16 (value [1] & 0xff)
@@ -108,7 +127,7 @@ func HandleRRQ (buffer []byte, conn *net.UDPConn, tid *net.UDPAddr) {
       var data []byte
       data = append (data, append(Int2Bytes(5), Int2Bytes(1)...)...)
       // message
-      message := []byte ("File not found.\x00")
+      message := []byte (ERRORS [1] + "\x00")
       data = append (data, message...)
 
       _, err := conn.WriteToUDP (data, tid)
@@ -204,10 +223,10 @@ func main () {
     var opcode uint16 = Bytes2UInt16 (buffer [0:2])
 
     switch opcode {
-      case 1: //RRQ
+      case RRQ: //RRQ
         HandleRRQ (buffer, conn, remoteTID)
         break
-      case 2: //WRQ
+      case WRQ: //WRQ
         HandleWRQ (buffer, conn, remoteTID)
         break
     }
