@@ -38,7 +38,7 @@ func Bytes2UInt16 (value []byte) uint16 {
 }
 
 func Int2Bytes (value uint16) (retVal []byte) {
-  retVal = []byte {uint8 (value >> 8), uint8 (value & 0xff)}
+  retVal = []byte {byte (value >> 8), byte (value & 0xff)}
   return
 }
 
