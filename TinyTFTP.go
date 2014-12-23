@@ -7,10 +7,8 @@ import "bytes"
 
 const BLOCK_SIZE = 512
 
-const (
-  OCTET = "octet"
-  NETASCII = "netascii"
-)
+const OCTET = "octet"
+const NETASCII = "netascii"
 
 const (
   RRQ uint16 = 1  + iota
