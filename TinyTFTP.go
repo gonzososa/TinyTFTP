@@ -7,8 +7,10 @@ import "bytes"
 
 const BLOCK_SIZE = 512
 
-const OCTET = "octet"
-const NETASCII = "netascii"
+const (
+  OCTET = "octet"
+  NETASCII = "netascii"
+)
 
 const (
   RRQ uint16 = 1  + iota
@@ -27,6 +29,13 @@ var ERRORS = [...] string {
   "Unknown transfer ID.",
   "File already exists.",
   "No such user.",
+}
+
+type Client struct {
+  TID *net.UDPAddr
+  Conn *net.UDPConn
+  File string
+  Mode string
 }
 
 func Bytes2UInt16 (value []byte) uint16 {
