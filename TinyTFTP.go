@@ -3,13 +3,14 @@ package main
 import "fmt"
 import "net"
 import "os"
+import "strings"
+import "path/filepath"
 import "bytes"
 
-const BLOCK_SIZE = 512
-
 const (
-  OCTET          = "octet"
-  NETASCII       = "netascii"
+  BLOCK_SIZE = 512
+  OCTET      = "octet"
+  NETASCII   = "netascii"
 )
 
 const (
@@ -74,7 +75,7 @@ func HandleRRQ (client *Client) {
     // file not found, send error message
     //opcode
     var data, message []byte
-    data = append (data, append(Int2Bytes(5), Int2Bytes(1)...)...)
+    data = append (Int2Bytes (ERROR), Int2Bytes (1)...)
     //message
     message = []byte (ERRORS [1] + "\x00")
 
@@ -134,11 +135,11 @@ func RRQBinary (client *Client) {
     }
 
     //opcode
-    data = Int2Bytes (3)
+    data = Int2Bytes (DATA)
     //block number
-    data = append (data, Int2Bytes(count)...)
+    data = append (data, Int2Bytes (count)...)
     //data
-    data = append (data, fileBuffer[:bytesRead]...)
+    data = append (data, fileBuffer [:bytesRead]...)
 
     err = client.SendBytes (data)
     if err != nil {
@@ -148,11 +149,6 @@ func RRQBinary (client *Client) {
     }
 
     client.ReadBytes (buffer)
-    /*_, _, err = conn.ReadFromUDP (buffer)*/
-    /*if err != nil {
-    fmt.Println (err)
-    break
-    }*/
 
     if (count == blockCount) {
       break
@@ -166,12 +162,26 @@ func RRQASCII (client *Client) {
 
 }
 
-func main () {
-  port := ":69"
+func GetWorkDirectory (params []string) (result string) {
+  if len (params) > 1 {
+    result = params [1]
+  } else {
+    result, _ = filepath.Abs (filepath.Dir (params [0]))
+  }
 
-  udpAddress, err := net.ResolveUDPAddr ("udp4", port)
+  if !strings.HasSuffix (result, string (os.PathSeparator)) {
+    result = result + string (os.PathSeparator)
+  }
+
+  return
+}
+
+func main () {
+  workDirectory := GetWorkDirectory (os.Args)
+
+  udpAddress, err := net.ResolveUDPAddr ("udp4", ":69")
   if err != nil {
-    fmt.Println ("Error resolving UDP address in ", port)
+    fmt.Println ("Error resolving UDP address")
     fmt.Println (err)
     return
   }
@@ -204,7 +214,7 @@ func main () {
         client := &Client {
           Conn: conn,
           TID: tid,
-          File: "/home/gonzalo/Atom/libffmpegsumo.so", //string (foo [0]),
+          File: workDirectory + string (foo [0]),
           Mode: string (foo [1]),
         }
 
