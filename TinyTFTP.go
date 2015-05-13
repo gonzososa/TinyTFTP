@@ -8,8 +8,8 @@ import "bytes"
 const BLOCK_SIZE = 512
 
 const (
-  OCTET = "octet"
-  NETASCII = "netascii"
+  OCTET          = "octet"
+  NETASCII       = "netascii"
 )
 
 const (
@@ -21,21 +21,41 @@ const (
 )
 
 var ERRORS = [...] string {
-  "Not defined, see error message (if any).",
-  "File not found.",
-  "Access violation.",
-  "Disk full or allocation exceeded.",
-  "Illegal TFTP operation.",
-  "Unknown transfer ID.",
-  "File already exists.",
-  "No such user.",
+      "Not defined, see error message (if any).",
+      "File not found.",
+      "Access violation.",
+      "Disk full or allocation exceeded.",
+      "Illegal TFTP operation.",
+      "Unknown transfer ID.",
+      "File already exists.",
+      "No such user.",
 }
 
 type Client struct {
-  TID *net.UDPAddr
-  Conn *net.UDPConn
-  File string
-  Mode string
+  TID   *net.UDPAddr
+  Conn  *net.UDPConn
+  File  string
+  Mode  string
+}
+
+func (c *Client) SendBytes (data []byte) error {
+  _, err := c.Conn.WriteToUDP (data, c.TID)
+
+  if err != nil {
+    return err
+  }
+
+  return nil
+}
+
+func (c *Client) ReadBytes (buffer []byte) ([]byte, error) {
+  _, _, err := c.Conn.ReadFromUDP (buffer)
+
+  if err != nil {
+    return nil, err
+  }
+
+  return buffer, nil
 }
 
 func Bytes2UInt16 (value []byte) uint16 {
@@ -49,158 +69,101 @@ func Int2Bytes (value uint16) (retVal []byte) {
   return
 }
 
-func HandleRRQ (buffer []byte, conn *net.UDPConn, tid *net.UDPAddr) {
-  var foo = bytes.Split (buffer [2:], []byte {0x00})
-  var filename string = string (foo [0])
-  var mode string = string (foo [1])
+func HandleRRQ (client *Client) {
+  if _, err := os.Stat (client.File); err != nil {
+    // file not found, send error message
+    //opcode
+    var data, message []byte
+    data = append (data, append(Int2Bytes(5), Int2Bytes(1)...)...)
+    //message
+    message = []byte (ERRORS [1] + "\x00")
 
-  if _, err := os.Stat (filename); err == nil {
-    var fileBuffer []byte
-
-    if mode == OCTET {
-      fileBuffer = make ([]byte, BLOCK_SIZE)
-    } else if mode == NETASCII {
-      panic ("Modo aún no soportado!!")
-    } else {
-      panic ("Modo desconocido!!")
-    }
-
-    file, err := os.Open (filename)
-    if err != nil {
-      fmt.Println ("Error al abrir el archivo: ", filename)
+    data = append (data, message...)
+    if err = client.SendBytes (data); err != nil {
       fmt.Println (err)
-      return
-    }
-    defer file.Close ()
-
-    fileInfo, err := file.Stat ()
-    if err != nil {
-      fmt.Println ("Error al obtener la información del archivo: ", filename)
-      fmt.Println (err)
-      return
     }
 
-    //var sendLast bool = false
-    var fileLength int64 = fileInfo.Size ()
-    var count uint16 = 1
+    return
+  }
 
-    var blockCount uint16 = uint16 (int (fileLength) / len (fileBuffer))
-    if int (fileLength) % len (fileBuffer) != 0 {
-      blockCount += 1
-    }
-
-    for {
-      n, err := file.Read (fileBuffer)
-      if err != nil {
-        fmt.Println (err)
-        return
-      }
-
-      //opcode
-      var data []byte = Int2Bytes (3)
-
-      //block number
-      data = append (data, Int2Bytes(count)...)
-
-      //data
-      switch mode {
-        case OCTET:
-        data = append (data, fileBuffer[:n]...)
-        break
-        case NETASCII:
-        panic ("not supported...")
-        break
-      }
-
-      _, err = conn.WriteToUDP (data, tid)
-      if err != nil {
-        fmt.Println (err)
-        break
-      }
-      data = nil
-
-      buffer = make ([]byte, 4)
-      /*_, _, err =*/ conn.ReadFromUDP (buffer)
-      /*if err != nil {
-      fmt.Println (err)
+  switch client.Mode {
+    case OCTET:
+      RRQBinary (client)
       break
-      }*/
-
-      if (count == blockCount) {
-        break
-      }
-
-      count++
-    }
-
-    } else {
-      // file not found, send error message
-      // opcode + error code
-      var data []byte
-      data = append (data, append(Int2Bytes(5), Int2Bytes(1)...)...)
-      // message
-      message := []byte (ERRORS [1] + "\x00")
-      data = append (data, message...)
-
-      _, err := conn.WriteToUDP (data, tid)
-      if err != nil {
-        fmt.Println (err)
-      }
-    }
+    case NETASCII:
+      panic ("Not supported!")
+      break
+  }
 }
 
-func HandleWRQ (buffer []byte, conn *net.UDPConn, tid *net.UDPAddr) {
-  //filename & mode
-  var foo = bytes.Split (buffer [2:], []byte {0x00})
-  var filename string = string (foo [0])
-  //var mode string = string (foo [1])
-
-  file, err := os.Create (filename)
+func RRQBinary (client *Client) {
+  file, err := os.Open (client.File)
   if err != nil {
+    fmt.Println ("Error opening file: ", client.File)
     fmt.Println (err)
     return
   }
   defer file.Close ()
 
-  data := []byte {0x00, 0x03, 0x00, 0x00}
-  _, err = conn.WriteToUDP (data, tid)
+  fileInfo, err := file.Stat ()
   if err != nil {
+    fmt.Println ("Error gathering file information: ", client.File)
     fmt.Println (err)
     return
   }
 
-  data = make ([]byte, BLOCK_SIZE)
+  //var sendLast bool = false
+  var fileSize int64 = fileInfo.Size ()
+  var count uint16 = 1
+  var fileBuffer []byte = make ([]byte, BLOCK_SIZE)
+
+  var blockCount uint16 = uint16 (int (fileSize) / len (fileBuffer))
+  if int (fileSize) % len (fileBuffer) != 0 {
+    blockCount += 1
+  }
+
+  var data   []byte
+  var buffer []byte = make ([]byte, 4)
 
   for {
-    n, remoteTID, err := conn.ReadFromUDP (data)
+    bytesRead, err := file.Read (fileBuffer)
     if err != nil {
+      fmt.Println ("Error reading data from file: ", client.File)
+      fmt.Println (err)
+      return
+    }
+
+    //opcode
+    data = Int2Bytes (3)
+    //block number
+    data = append (data, Int2Bytes(count)...)
+    //data
+    data = append (data, fileBuffer[:bytesRead]...)
+
+    err = client.SendBytes (data)
+    if err != nil {
+      fmt.Println ("Network error while sending data to ", client.TID)
       fmt.Println (err)
       break
     }
 
-    // extraer el opcode y block # de data
-    // var opcode2 = data[0:2]
-    // var block uint16 = data [2:4]
-    //
-    _,  err = file.Write (data[4:n])
-    if err != nil {
-      fmt.Println (err)
+    client.ReadBytes (buffer)
+    /*_, _, err = conn.ReadFromUDP (buffer)*/
+    /*if err != nil {
+    fmt.Println (err)
+    break
+    }*/
+
+    if (count == blockCount) {
       break
     }
 
-    data = []byte {0x00, 0x03}
-    // agregar block # recibido
-    // data = append (data, ...)
-    _, err = conn.WriteToUDP (data, remoteTID)
-    if err != nil {
-      fmt.Println (err)
-      break
-    }
-
-    if n < BLOCK_SIZE {
-      break
-    }
+    count++
   }
+}
+
+func RRQASCII (client *Client) {
+
 }
 
 func main () {
@@ -219,12 +182,11 @@ func main () {
     fmt.Println (err)
     return
   }
-
   defer conn.Close ()
 
-  var buffer = make ([]byte, BLOCK_SIZE)
+  var buffer = make ([]byte, 128)
 
-  bytesRead, remoteTID, err := conn.ReadFromUDP (buffer)
+  bytesRead, tid, err := conn.ReadFromUDP (buffer)
   if err != nil {
     fmt.Println ("Error reading data from connection")
     fmt.Println (err)
@@ -236,10 +198,20 @@ func main () {
 
     switch opcode {
       case RRQ: //RRQ
-        HandleRRQ (buffer, conn, remoteTID)
+        //split filename & transfer mode
+        var foo = bytes.Split (buffer [2:], []byte {0x00})
+
+        client := &Client {
+          Conn: conn,
+          TID: tid,
+          File: "/home/gonzalo/Atom/libffmpegsumo.so", //string (foo [0]),
+          Mode: string (foo [1]),
+        }
+
+        HandleRRQ (client)
         break
       case WRQ: //WRQ
-        HandleWRQ (buffer, conn, remoteTID)
+        //HandleWRQ (buffer, conn, remoteTID)
         break
     }
   }
